@@ -2,7 +2,7 @@
 
 # Usage
 Compile:
-```
+```bash
 javac FTPClient.java FTPServer.java FTPServerRequest.java FileMessager.java
 ```
 
