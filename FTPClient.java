@@ -1,3 +1,4 @@
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.InetAddress;
 import java.io.BufferedReader;
@@ -14,7 +15,13 @@ import java.lang.StringBuilder;
 public class FTPClient {
     private DataInputStream dataInputStream;
     private DataOutputStream dataOutputStream;
-    private Socket socket;
+    private DataOutputStream controlOutputStream;
+
+    private ServerSocket serverSocket;
+    private Socket controlSocket;
+    private Socket dataSocket;
+
+    private final static int CLIENT_DATA_PORT = 1053;
 
     public void start() {
         tryStart();
@@ -28,7 +35,8 @@ public class FTPClient {
         }
     }
 
-    private void startRepl()  throws Exception {
+    private void startRepl() throws Exception {
+        printWelcome();
         final Scanner scanner = new Scanner(System.in);
         while (true) {
             final String inputLine = scanner.nextLine();
@@ -41,11 +49,16 @@ public class FTPClient {
                 final int port = Integer.parseInt(tokenizer.nextToken());
                 connect(host, port);
             } else if (command.equals("list:") || command.equals("stor:") || command.equals("retr:")) {
-                this.dataOutputStream.writeBytes(withNewLine(inputLine));
+                if (controlSocket.isClosed()) {
+                    System.out.println("Connect to a server first!");
+                    continue;
+                } else {
+                    controlOutputStream.writeBytes(withNewLine(inputLine));
+                    startDataConnection();
+                }
                 if (command.equals("list:")) {
                     listFiles();
-                }
-                if (command.equals("retr:") || command.equals("stor:")) {
+                } else if (command.equals("retr:") || command.equals("stor:")) {
                     final String fileName = tokenizer.nextToken();
                     if (command.equals("retr:")) {
                         retrieveFile(fileName);
@@ -53,10 +66,10 @@ public class FTPClient {
                         storeFile(fileName);
                     }
                 }
-                closeConnection();
+                closeDataConnection();
             } else if (command.equals("quit")) {
-                if (socket.isConnected()) {
-                    closeConnection();
+                if (controlSocket.isConnected()) {
+                    closeControlConnection();
                 }
                 break;
             } else if (command.equals("help")){
@@ -66,6 +79,37 @@ public class FTPClient {
             }
         }
         scanner.close();
+    }
+
+    private void printWelcome() {
+        System.out.println("Welcome to FTPClient! Use command 'help' for FTPClient usage.");
+    }
+
+    private void startDataConnection() throws IOException {
+        serverSocket = new ServerSocket(CLIENT_DATA_PORT);
+        dataSocket = serverSocket.accept();
+        dataInputStream = new DataInputStream(dataSocket.getInputStream());
+        dataOutputStream = new DataOutputStream(dataSocket.getOutputStream());
+    }
+
+    private void closeDataConnection() throws IOException {
+        dataInputStream.close();
+        dataOutputStream.close();
+        dataSocket.close();
+        serverSocket.close();
+    }
+
+    private void connect(String host, int port) throws IOException {
+        System.out.println("Attempting to connect to server...");
+        InetAddress address = InetAddress.getByName(host);
+        controlSocket = new Socket(address, port);
+        controlOutputStream = new DataOutputStream(controlSocket.getOutputStream());
+        System.out.println("Connected to server.");
+    }
+
+    private void closeControlConnection() throws IOException {
+        controlOutputStream.close();
+        controlSocket.close();
     }
 
     private void printHelp() {
@@ -81,23 +125,10 @@ public class FTPClient {
         return String.format("%s\n", string);
     }
 
-    private void closeConnection() throws Exception {
-        this.socket.close();
-    }
-
-    private void connect(String host, int port) throws IOException {
-        System.out.println("Attempting to connect to server...");
-        InetAddress address = InetAddress.getByName(host);
-        this.socket = new Socket(address, port);
-        this.dataInputStream = new DataInputStream(this.socket.getInputStream());
-        this.dataOutputStream = new DataOutputStream(this.socket.getOutputStream());
-        System.out.println("Connected to server.");
-    }
-
     private void retrieveFile(String fileName) throws IOException {
         System.out.println("Attempting to retrieve " + fileName + "...");
         FileOutputStream fileOutputStream = new FileOutputStream(fileName);
-        FileMessager.receiveFile(this.dataInputStream, fileOutputStream);
+        FileMessager.receiveFile(dataInputStream, fileOutputStream);
         fileOutputStream.close();
         System.out.println(fileName + " was successfully downloaded.");
     }
@@ -105,14 +136,14 @@ public class FTPClient {
     private void storeFile(String fileName) throws IOException {
         System.out.println("Attempting to send " + fileName + "...");
         FileInputStream fileInputStream = new FileInputStream(fileName);
-        FileMessager.sendFile(fileInputStream, this.dataOutputStream);
+        FileMessager.sendFile(fileInputStream, dataOutputStream);
         fileInputStream.close();
         System.out.println(fileName + " was successfully stored.");
     }
 
     private void listFiles() throws IOException {
         System.out.println("Attempting to get list of files on server...");
-        BufferedReader reader = new BufferedReader(new InputStreamReader(this.socket.getInputStream()));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(dataSocket.getInputStream()));
         StringBuilder stringBuilder = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {

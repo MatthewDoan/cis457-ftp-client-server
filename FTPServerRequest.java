@@ -1,3 +1,4 @@
+import java.net.InetAddress;
 import java.net.Socket;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
@@ -6,18 +7,27 @@ import java.io.File;
 import java.io.InputStreamReader;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.Runnable;
 import java.util.StringTokenizer;
 
 public class FTPServerRequest implements Runnable {
-    private Socket socket;
+
+    private Socket controlSocket;
+
+    private Socket dataSocket;
 
     private DataInputStream dataInputStream;
 
     private DataOutputStream dataOutputStream;
 
-    public FTPServerRequest(Socket socket) {
-        this.socket = socket;
+    private InetAddress clientAddress;
+
+    private final static int CLIENT_DATA_PORT = 1053;
+
+    public FTPServerRequest(Socket controlSocket) {
+        this.controlSocket = controlSocket;
+        this.clientAddress = controlSocket.getInetAddress();
     }
 
     public void run() {
@@ -29,41 +39,51 @@ public class FTPServerRequest implements Runnable {
     }
 
     private void processRequest() throws Exception {
-        this.dataInputStream = new DataInputStream(socket.getInputStream());
-        this.dataOutputStream = new DataOutputStream(socket.getOutputStream());
-        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        String request = bufferedReader.readLine();
-        StringTokenizer tokenizer = new StringTokenizer(request);
-        String command = tokenizer.nextToken();
-        command = command.toLowerCase();
-        System.out.println("Request: " + request);
-        if (command.equals("list:") || command.equals("stor:") || command.equals("retr:")) {
-            if (command.equals("list:")) {
-                listFiles();
-            } else if (command.equals("retr:") || command.equals("stor:")) {
-                final String fileName = tokenizer.nextToken();
-                if (command.equals("retr:")) {
-                    retrieveFile(fileName);
-                } else {
-                    storeFile(fileName);
+        BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(controlSocket.getInputStream()));
+        while (true) {
+            String request = bufferedReader.readLine();
+            StringTokenizer tokenizer = new StringTokenizer(request);
+            String command = tokenizer.nextToken();
+            command = command.toLowerCase();
+            System.out.println("Request: " + request);
+            if (command.equals("list:") || command.equals("stor:") || command.equals("retr:")) {
+                startDataConnection();
+                if (command.equals("list:")) {
+                    listFiles();
+                } else if (command.equals("retr:") || command.equals("stor:")) {
+                    final String fileName = tokenizer.nextToken();
+                    if (command.equals("retr:")) {
+                        retrieveFile(fileName);
+                    } else {
+                        storeFile(fileName);
+                    }
                 }
+                closeDataConnection();
+            } else if (command.equals("quit")) {
+                break;
             }
         }
-        closeConnection();
+
+        bufferedReader.close();
+        controlSocket.close();
     }
 
-    private void closeConnection() throws Exception {
-        System.out.println("Attempting to close streams and socket connection...");
-        this.dataInputStream.close();
-        this.dataOutputStream.close();
-        this.socket.close();
-        System.out.println("Successfully closed streams and socket connection.");
+    private void startDataConnection() throws IOException {
+        dataSocket = new Socket(clientAddress, CLIENT_DATA_PORT);
+        dataInputStream = new DataInputStream(dataSocket.getInputStream());
+        dataOutputStream = new DataOutputStream(dataSocket.getOutputStream());
+    }
+
+    private void closeDataConnection() throws IOException {
+        dataInputStream.close();
+        dataOutputStream.close();
+        dataSocket.close();
     }
 
     private void retrieveFile(String fileName) throws Exception {
         System.out.println("Attempting to send over " + fileName + "...");
         FileInputStream fileInputStream = new FileInputStream(fileName);
-        FileMessager.sendFile(fileInputStream, this.dataOutputStream);
+        FileMessager.sendFile(fileInputStream, dataOutputStream);
         fileInputStream.close();
         System.out.println(fileName + " was sent to the client.");
     }
@@ -71,7 +91,7 @@ public class FTPServerRequest implements Runnable {
     private void storeFile(String fileName) throws Exception {
         System.out.println("Attempting to store " + fileName + "...");
         FileOutputStream fileOutputStream = new FileOutputStream(fileName);
-        FileMessager.receiveFile(this.dataInputStream, fileOutputStream);
+        FileMessager.receiveFile(dataInputStream, fileOutputStream);
         fileOutputStream.close();
         System.out.println(fileName + " was stored.");
     }
@@ -79,7 +99,7 @@ public class FTPServerRequest implements Runnable {
     private void listFiles() throws Exception {
         System.out.println("Listing files...");
         String filesList = getCurrentDirectoryFileNames();
-        this.dataOutputStream.writeBytes(filesList);
+        dataOutputStream.writeBytes(filesList);
         System.out.println("Sent over file list.");
     }
 

@@ -9,11 +9,12 @@ public class FTPServer {
 
     public FTPServer(int port) throws Exception {
         this.serverSocket = new ServerSocket(port);
+        System.out.println("Starting FTPServer on port " + port);
     }
 
     public void start() {
         try {
-            this.tryStart();
+            tryStart();
         } catch (IOException ex) {
             System.out.println(ex.getMessage());
         }
