@@ -9,6 +9,7 @@ public class FTPServer {
 
     public FTPServer(int port) throws Exception {
         this.serverSocket = new ServerSocket(port);
+        this.serverSocket.setReuseAddress(true);
         System.out.println("Starting FTPServer on port " + port);
     }
 

@@ -35,6 +35,12 @@ public class FTPServerRequest implements Runnable {
             processRequest();
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
+            try {
+                controlSocket.close();
+                closeDataConnection();
+            } catch (Exception ex2) {
+                System.out.println(ex2.getMessage());
+            }
         }
     }
 

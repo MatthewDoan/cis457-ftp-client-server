@@ -49,13 +49,14 @@ public class FTPClient {
                 final int port = Integer.parseInt(tokenizer.nextToken());
                 connect(host, port);
             } else if (command.equals("list:") || command.equals("stor:") || command.equals("retr:")) {
-                if (controlSocket.isClosed()) {
-                    System.out.println("Connect to a server first!");
-                    continue;
-                } else {
+                if (controlSocket != null) {
                     controlOutputStream.writeBytes(withNewLine(inputLine));
                     startDataConnection();
+                } else {
+                    System.out.println("Connect to a server first!");
+                    continue;
                 }
+
                 if (command.equals("list:")) {
                     listFiles();
                 } else if (command.equals("retr:") || command.equals("stor:")) {
@@ -69,10 +70,11 @@ public class FTPClient {
                 closeDataConnection();
             } else if (command.equals("quit")) {
                 if (controlSocket.isConnected()) {
+                    controlOutputStream.writeBytes(withNewLine(inputLine));
                     closeControlConnection();
                 }
                 break;
-            } else if (command.equals("help")){
+            } else if (command.equals("help")) {
                 printHelp();
             } else {
                 System.out.println("Invalid command!");
@@ -87,6 +89,7 @@ public class FTPClient {
 
     private void startDataConnection() throws IOException {
         serverSocket = new ServerSocket(CLIENT_DATA_PORT);
+        serverSocket.setReuseAddress(true);
         dataSocket = serverSocket.accept();
         dataInputStream = new DataInputStream(dataSocket.getInputStream());
         dataOutputStream = new DataOutputStream(dataSocket.getOutputStream());
