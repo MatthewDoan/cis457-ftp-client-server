@@ -35,7 +35,7 @@ public class FTPServer {
         int port = checkPortArg(args);
         if (port > -1) {
             FTPServer server = new FTPServer(port);
-            server.tryStart();
+            server.start();
         } else {
             System.exit(1);
         }

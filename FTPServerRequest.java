@@ -35,12 +35,6 @@ public class FTPServerRequest implements Runnable {
             processRequest();
         } catch (Exception ex) {
             System.out.println(ex.getMessage());
-            try {
-                controlSocket.close();
-                closeDataConnection();
-            } catch (Exception ex2) {
-                System.out.println(ex2.getMessage());
-            }
         }
     }
 
@@ -74,7 +68,8 @@ public class FTPServerRequest implements Runnable {
         controlSocket.close();
     }
 
-    private void startDataConnection() throws IOException {
+    private void startDataConnection() throws Exception {
+        Thread.sleep(2000);
         dataSocket = new Socket(clientAddress, CLIENT_DATA_PORT);
         dataInputStream = new DataInputStream(dataSocket.getInputStream());
         dataOutputStream = new DataOutputStream(dataSocket.getOutputStream());
